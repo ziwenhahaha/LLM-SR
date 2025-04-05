@@ -17,17 +17,18 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-from typing import Collection, Sequence, Type
+from typing import Collection, Sequence, Type, Optional, Dict, Any, List, Union
 import numpy as np
 import time
+import os
+import json
+import requests
+import litellm
+from litellm import completion
 
 from llmsr import evaluator
 from llmsr import buffer
 from llmsr import config as config_lib
-import requests
-import json
-import http.client
-import os
 
 
 
@@ -77,7 +78,7 @@ class Sampler:
             prompt = self._database.get_prompt()
             
             reset_time = time.time()
-            samples = self._llm.draw_samples(prompt.code,self.config)
+            samples = self._llm.draw_samples(prompt.code, self.config)
             sample_time = (time.time() - reset_time) / self._samples_per_prompt
 
             # This loop can be executed in parallel on remote evaluator machines.
@@ -102,9 +103,6 @@ class Sampler:
 
     def _global_sample_nums_plus_one(self):
         self.__class__._global_samples_nums += 1
-
-
-
 
 
 
@@ -141,13 +139,13 @@ def _extract_body(sample: str, config: config_lib.Config) -> str:
             break
     
     if find_def_declaration:
-        # for gpt APIs
+        # for APIs
         if config.use_api:
             code = ''
             for line in lines[func_body_lineno + 1:]:
                 code += line + '\n'
         
-        # for mixtral
+        # for local models
         else:
             code = ''
             indent = '    '
@@ -162,38 +160,51 @@ def _extract_body(sample: str, config: config_lib.Config) -> str:
 
 
 
-class LocalLLM(LLM):
-    def __init__(self, samples_per_prompt: int, batch_inference: bool = True, trim=True) -> None:
+class UnifiedLLM(LLM):
+    def __init__(
+            self, 
+            samples_per_prompt: int, 
+            batch_inference: bool = True, 
+            trim: bool = True,
+            instruction_prompt: Optional[str] = None
+        ) -> None:
         """
+        Unified LLM class that supports both local models and various API providers via litellm.
+        
         Args:
-            batch_inference: Use batch inference when sample equation program skeletons. The batch size equals to the samples_per_prompt.
+            samples_per_prompt: Number of completions to generate per prompt
+            batch_inference: Whether to use batch inference for local models
+            trim: Whether to extract function bodies from samples
+            instruction_prompt: Custom instruction to prepend to prompts
         """
         super().__init__(samples_per_prompt)
 
-        url = "http://127.0.0.1:5000/completions"
-        instruction_prompt = ("You are a helpful assistant tasked with discovering mathematical function structures for scientific systems. \
-                             Complete the 'equation' function below, considering the physical meaning and relationships of inputs.\n\n")
+        self._local_url = "http://127.0.0.1:5000/completions"
+        self._instruction_prompt = instruction_prompt or (
+            "You are a helpful assistant tasked with discovering mathematical function structures for scientific systems. "
+            "Complete the 'equation' function below, considering the physical meaning and relationships of inputs.\n\n"
+        )
         self._batch_inference = batch_inference
-        self._url = url
-        self._instruction_prompt = instruction_prompt
         self._trim = trim
 
+        # Set up litellm options if needed
+        litellm.drop_params = True  # To ignore unsupported params
+        litellm.verbose = False     # Set to True for debugging
 
     def draw_samples(self, prompt: str, config: config_lib.Config) -> Collection[str]:
         """Returns multiple equation program skeleton hypotheses for the given `prompt`."""
-        if config.use_api:
-            return self._draw_samples_api(prompt, config)
-        else:
+        if not config.use_api:
             return self._draw_samples_local(prompt, config)
-
+        else:
+            return self._draw_samples_api(prompt, config)
 
     def _draw_samples_local(self, prompt: str, config: config_lib.Config) -> Collection[str]:    
-        # instruction
+        # Add instruction to prompt
         prompt = '\n'.join([self._instruction_prompt, prompt])
         while True:
             try:
                 all_samples = []
-                # response from llm server
+                # Response from local LLM server
                 if self._batch_inference:
                     response = self._do_request(prompt)
                     for res in response:
@@ -203,58 +214,70 @@ class LocalLLM(LLM):
                         response = self._do_request(prompt)
                         all_samples.append(response)
 
-                # trim equation program skeleton body from samples
+                # Trim equation program skeleton body from samples
                 if self._trim:
                     all_samples = [_extract_body(sample, config) for sample in all_samples]
                 
                 return all_samples
-            except Exception:
+            except Exception as e:
+                print(f"Error in local inference: {e}")
+                time.sleep(1)
                 continue
 
-
     def _draw_samples_api(self, prompt: str, config: config_lib.Config) -> Collection[str]:
+        """Use litellm to get samples from any supported LLM API provider."""
         all_samples = []
-        prompt = '\n'.join([self._instruction_prompt, prompt])
+        full_prompt = '\n'.join([self._instruction_prompt, prompt])
+        
+        # Prepare API call parameters
+        model = config.api_model
+        api_params = self._get_api_params(config)
         
         for _ in range(self._samples_per_prompt):
             while True:
                 try:
-                    conn = http.client.HTTPSConnection("api.openai.com")
-                    payload = json.dumps({
-                        "max_tokens": 512,
-                        "model": config.api_model,
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ]
-                    })
-                    headers = {
-                        'Authorization': f"Bearer {os.environ['API_KEY']}",
-                        'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
-                        'Content-Type': 'application/json'
-                    }
-                    conn.request("POST", "/v1/chat/completions", payload, headers)
-                    res = conn.getresponse()
-                    data = json.loads(res.read().decode("utf-8"))
-                    response = data['choices'][0]['message']['content']
+                    # Call any LLM API through litellm
+                    response = completion(
+                        model=model,
+                        messages=[{"role": "user", "content": full_prompt}],
+                        max_tokens=512,
+                        **api_params
+                    )
                     
+                    # Extract content from response
+                    content = response.choices[0].message.content
+                    
+                    # Trim function body if needed
                     if self._trim:
-                        response = _extract_body(response, config)
+                        content = _extract_body(content, config)
                     
-                    all_samples.append(response)
+                    all_samples.append(content)
                     break
-
-                except Exception:
+                except Exception as e:
+                    print(f"API call error: {e}")
+                    time.sleep(1)
                     continue
         
         return all_samples
     
+    def _get_api_params(self, config: config_lib.Config) -> Dict[str, Any]:
+        """Get provider-specific parameters from config."""
+        params = {}
+        
+        # Common parameters for all providers
+        if hasattr(config, 'temperature') and config.temperature is not None:
+            params['temperature'] = config.temperature
+        
+        # Add any provider-specific parameters
+        if hasattr(config, 'api_params') and config.api_params is not None:
+            params.update(config.api_params)
+            
+        return params
     
-    def _do_request(self, content: str) -> str:
+    def _do_request(self, content: str) -> Union[str, List[str]]:
+        """Send request to local LLM server."""
         content = content.strip('\n').strip()
-        # repeat the prompt for batch inference
+        # Repeat prompt for batch inference
         repeat_prompt: int = self._samples_per_prompt if self._batch_inference else 1
         
         data = {
@@ -271,10 +294,14 @@ class LocalLLM(LLM):
         }
         
         headers = {'Content-Type': 'application/json'}
-        response = requests.post(self._url, data=json.dumps(data), headers=headers)
+        response = requests.post(self._local_url, data=json.dumps(data), headers=headers)
         
-        if response.status_code == 200: #Server status code 200 indicates successful HTTP request! 
-            response = response.json()["content"]
-            
-            return response if self._batch_inference else response[0]
+        if response.status_code == 200:
+            response_json = response.json()
+            content = response_json["content"]
+            return content if self._batch_inference else content[0]
+        else:
+            raise Exception(f"Error from local server: {response.status_code} - {response.text}")
 
+# 向后兼容的类名
+LocalLLM = UnifiedLLM
