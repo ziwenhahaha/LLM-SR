@@ -1,0 +1,37 @@
+logs/oscillator1/events.out.tfevents.1743856195.homelab.206688.0
+logs/oscillator1/events.out.tfevents.1743856211.homelab.206860.0
+logs/oscillator1/Legal_Illegal Function_illegal function num/events.out.tfevents.1743856211.homelab.206860.2
+logs/oscillator1/Legal_Illegal Function_legal function num/events.out.tfevents.1743856211.homelab.206860.1
+logs/oscillator1/samples/samples_0.json
+logs/oscillator1/samples/samples_2.json
+logs/oscillator1/samples/samples_3.json
+logs/oscillator1/samples/samples_4.json
+logs/oscillator1/samples/samples_5.json
+logs/oscillator1/Total Sample_Evaluate Time_evaluate time/events.out.tfevents.1743856211.homelab.206860.4
+logs/oscillator1/Total Sample_Evaluate Time_sample time/events.out.tfevents.1743856211.homelab.206860.3
+logs/stressstrain_gpt3.5/events.out.tfevents.1743845677.homelab.201145.0
+logs/stressstrain_gpt3.5/Legal_Illegal Function_illegal function num/events.out.tfevents.1743845678.homelab.201145.2
+logs/stressstrain_gpt3.5/Legal_Illegal Function_legal function num/events.out.tfevents.1743845678.homelab.201145.1
+logs/stressstrain_gpt3.5/samples/samples_0.json
+logs/stressstrain_gpt3.5/Total Sample_Evaluate Time_evaluate time/events.out.tfevents.1743845678.homelab.201145.4
+logs/stressstrain_gpt3.5/Total Sample_Evaluate Time_sample time/events.out.tfevents.1743845678.homelab.201145.3
+*.pyc
+*.json
+../__pycache__
+*.egg-info
+*.egg
+*.whl
+*.tar.gz
+*.zip
+*.log
+*.out
+*.tmp
+logs/
+llmsr/__pycache__/buffer.cpython-311.pyc
+llmsr/__pycache__/code_manipulation.cpython-311.pyc
+llmsr/__pycache__/config.cpython-311.pyc
+llmsr/__pycache__/evaluator_accelerate.cpython-311.pyc
+llmsr/__pycache__/evaluator.cpython-311.pyc
+llmsr/__pycache__/pipeline.cpython-311.pyc
+llmsr/__pycache__/profile.cpython-311.pyc
+llmsr/__pycache__/sampler.cpython-311.pyc
