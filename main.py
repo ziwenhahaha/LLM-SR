@@ -128,3 +128,4 @@ if __name__ == '__main__':
         log_dir=args.log_path,
         samples_per_prompt=args.samples_per_prompt,
     )
+##
