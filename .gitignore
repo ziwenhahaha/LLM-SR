@@ -27,11 +27,4 @@ logs/stressstrain_gpt3.5/Total Sample_Evaluate Time_sample time/events.out.tfeve
 *.out
 *.tmp
 logs/
-llmsr/__pycache__/buffer.cpython-311.pyc
-llmsr/__pycache__/code_manipulation.cpython-311.pyc
-llmsr/__pycache__/config.cpython-311.pyc
-llmsr/__pycache__/evaluator_accelerate.cpython-311.pyc
-llmsr/__pycache__/evaluator.cpython-311.pyc
-llmsr/__pycache__/pipeline.cpython-311.pyc
-llmsr/__pycache__/profile.cpython-311.pyc
-llmsr/__pycache__/sampler.cpython-311.pyc
+llmsr/__pycache__/*
